@@ -1,0 +1,471 @@
+{
+  "info": {
+    "name": "Accessibility Planner API",
+    "description": "Complete API collection for the Accessibility Needs Generative Planner.\n\nSetup:\n1. Start MongoDB on localhost:27017\n2. Start Flask backend: cd backend && python3 run.py\n3. Import this collection into Postman\n4. Register a user first, then use the returned access_token for authenticated requests.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:5001/api/v1"
+    },
+    {
+      "key": "access_token",
+      "value": ""
+    },
+    {
+      "key": "refresh_token",
+      "value": ""
+    },
+    {
+      "key": "user_id",
+      "value": ""
+    },
+    {
+      "key": "plan_id",
+      "value": ""
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{access_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    var json = pm.response.json();",
+                  "    pm.collectionVariables.set('access_token', json.access_token);",
+                  "    pm.collectionVariables.set('refresh_token', json.refresh_token);",
+                  "    pm.collectionVariables.set('user_id', json.user._id);",
+                  "    pm.test('Registration successful', function () {",
+                  "        pm.expect(json.access_token).to.be.a('string');",
+                  "        pm.expect(json.user.email).to.be.a('string');",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"email\": \"testuser@example.com\",\n    \"password\": \"Test1234\",\n    \"full_name\": \"Test User\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/register",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "register"]
+            },
+            "description": "Register a new user. Returns access_token and refresh_token. Tokens are auto-saved to collection variables."
+          },
+          "response": []
+        },
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var json = pm.response.json();",
+                  "    pm.collectionVariables.set('access_token', json.access_token);",
+                  "    pm.collectionVariables.set('refresh_token', json.refresh_token);",
+                  "    pm.collectionVariables.set('user_id', json.user._id);",
+                  "    pm.test('Login successful', function () {",
+                  "        pm.expect(json.access_token).to.be.a('string');",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"email\": \"testuser@example.com\",\n    \"password\": \"Test1234\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "login"]
+            },
+            "description": "Login with email and password. Returns access_token and refresh_token. Tokens are auto-saved."
+          },
+          "response": []
+        },
+        {
+          "name": "Refresh Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var json = pm.response.json();",
+                  "    pm.collectionVariables.set('access_token', json.access_token);",
+                  "    pm.test('Token refreshed', function () {",
+                  "        pm.expect(json.access_token).to.be.a('string');",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{refresh_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/auth/refresh",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "refresh"]
+            },
+            "description": "Refresh the access token using the refresh token. Send refresh_token in Authorization header."
+          },
+          "response": []
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/auth/logout",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "logout"]
+            },
+            "description": "Logout the current user. Requires access_token."
+          },
+          "response": []
+        }
+      ],
+      "description": "Authentication endpoints — register, login, refresh, logout."
+    },
+    {
+      "name": "Profile",
+      "item": [
+        {
+          "name": "Create Profile",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"disabilities\": [\n        {\n            \"type\": \"mobility\",\n            \"severity\": \"moderate\",\n            \"specific_needs\": \"Wheelchair user, needs ramp access\"\n        },\n        {\n            \"type\": \"visual\",\n            \"severity\": \"mild\",\n            \"specific_needs\": \"Low vision, prefers high contrast\"\n        }\n    ],\n    \"preferences\": {\n        \"preferred_transport\": \"public\",\n        \"max_walking_distance\": 300,\n        \"companion_needed\": false,\n        \"plan_format\": \"detailed\",\n        \"voice_input\": false,\n        \"high_contrast\": true,\n        \"font_size\": \"large\"\n    },\n    \"location\": {\n        \"city\": \"Mumbai\",\n        \"default_address\": \"Andheri West, Mumbai\"\n    }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/profile/",
+              "host": ["{{base_url}}"],
+              "path": ["profile", ""]
+            },
+            "description": "Create the user's accessibility profile. Run this after registration."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Profile",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/profile/",
+              "host": ["{{base_url}}"],
+              "path": ["profile", ""]
+            },
+            "description": "Get the current user's accessibility profile."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Profile",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"disabilities\": [\n        {\n            \"type\": \"mobility\",\n            \"severity\": \"severe\",\n            \"specific_needs\": \"Electric wheelchair user\"\n        }\n    ],\n    \"preferences\": {\n        \"preferred_transport\": \"ride_share\",\n        \"max_walking_distance\": 100,\n        \"companion_needed\": true,\n        \"plan_format\": \"step_by_step\"\n    },\n    \"location\": {\n        \"city\": \"Delhi\",\n        \"default_address\": \"Connaught Place, Delhi\"\n    }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/profile/",
+              "host": ["{{base_url}}"],
+              "path": ["profile", ""]
+            },
+            "description": "Update the full accessibility profile."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Preferences Only",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"high_contrast\": true,\n    \"font_size\": \"extra-large\",\n    \"voice_input\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/profile/preferences",
+              "host": ["{{base_url}}"],
+              "path": ["profile", "preferences"]
+            },
+            "description": "Partially update only the preferences subdocument."
+          },
+          "response": []
+        }
+      ],
+      "description": "User accessibility profile CRUD operations."
+    },
+    {
+      "name": "Plans",
+      "item": [
+        {
+          "name": "Generate Plan",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    var json = pm.response.json();",
+                  "    pm.collectionVariables.set('plan_id', json.plan._id);",
+                  "    pm.test('Plan generated', function () {",
+                  "        pm.expect(json.plan.generated_plan).to.have.property('title');",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"description\": \"I need to visit the city hospital for a routine checkup tomorrow morning. I use a wheelchair and have low vision.\",\n    \"activity_type\": \"medical\",\n    \"date\": \"2026-04-20\",\n    \"time\": \"09:00 - 12:00\",\n    \"destination\": \"City General Hospital, Main Street\",\n    \"notes\": \"Need wheelchair accessible transport and entrance\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/plans/generate",
+              "host": ["{{base_url}}"],
+              "path": ["plans", "generate"]
+            },
+            "description": "Generate a personalized accessibility plan using AI. Requires a profile to exist first. Plan ID is auto-saved."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Plan by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/plans/{{plan_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["plans", "{{plan_id}}"]
+            },
+            "description": "Get a specific plan by its ID."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Plan History",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/plans/history?page=1&per_page=10",
+              "host": ["{{base_url}}"],
+              "path": ["plans", "history"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "per_page", "value": "10" }
+              ]
+            },
+            "description": "Get paginated plan history for the current user."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Plan",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/plans/{{plan_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["plans", "{{plan_id}}"]
+            },
+            "description": "Delete a specific plan."
+          },
+          "response": []
+        }
+      ],
+      "description": "Plan generation, retrieval, history, and deletion."
+    },
+    {
+      "name": "Feedback",
+      "item": [
+        {
+          "name": "Submit Feedback",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"plan_id\": \"{{plan_id}}\",\n    \"rating\": 4,\n    \"thumbs\": \"up\",\n    \"comment\": \"Very helpful plan! The wheelchair route suggestions were accurate.\",\n    \"useful_steps\": [1, 2],\n    \"problematic_steps\": []\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/feedback/",
+              "host": ["{{base_url}}"],
+              "path": ["feedback", ""]
+            },
+            "description": "Submit feedback for a generated plan."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Plan Feedback",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/feedback/plan/{{plan_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["feedback", "plan", "{{plan_id}}"]
+            },
+            "description": "Get all feedback and average rating for a specific plan."
+          },
+          "response": []
+        }
+      ],
+      "description": "Feedback submission and retrieval for plans."
+    },
+    {
+      "name": "Admin",
+      "item": [
+        {
+          "name": "Get Dashboard Stats",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/admin/stats",
+              "host": ["{{base_url}}"],
+              "path": ["admin", "stats"]
+            },
+            "description": "Get system statistics (total users, plans, feedbacks). Requires admin role."
+          },
+          "response": []
+        },
+        {
+          "name": "List Users",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/admin/users?page=1&per_page=20",
+              "host": ["{{base_url}}"],
+              "path": ["admin", "users"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "per_page", "value": "20" }
+              ]
+            },
+            "description": "List all users with pagination. Requires admin role."
+          },
+          "response": []
+        },
+        {
+          "name": "Update User Status",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"is_active\": false,\n    \"role\": \"admin\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/admin/users/{{user_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["admin", "users", "{{user_id}}"]
+            },
+            "description": "Update a user's status or role. Requires admin role. Only 'is_active' and 'role' fields are allowed."
+          },
+          "response": []
+        }
+      ],
+      "description": "Admin-only endpoints for system management."
+    }
+  ]
+}

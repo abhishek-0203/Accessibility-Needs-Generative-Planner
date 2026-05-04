@@ -1,76 +1,173 @@
+"""Unit tests for authentication routes and services."""
 import pytest
-from app import create_app
+import mongomock
+from unittest.mock import patch, MagicMock
+from bson.objectid import ObjectId
+from datetime import datetime
 
+
+# ── Validator tests (no DB needed) ─────────────────────────────────────────
+
+class TestAuthValidation:
+    """Test input validation at the service layer."""
+
+    def test_register_rejects_invalid_email(self):
+        from app.services.auth_service import AuthService
+        result, code = AuthService.register('not-an-email', 'Valid123', 'Test User')
+        assert code == 400
+        assert 'Invalid email' in result['error']
+
+    def test_register_rejects_weak_password(self):
+        from app.services.auth_service import AuthService
+        result, code = AuthService.register('user@test.com', 'weak', 'Test User')
+        assert code == 400
+        assert 'Password' in result['error']
+
+    def test_register_rejects_short_name(self):
+        from app.services.auth_service import AuthService
+        result, code = AuthService.register('user@test.com', 'Valid123', 'A')
+        assert code == 400
+        assert 'Full name' in result['error']
+
+
+# ── Route-level tests (with mongomock) ─────────────────────────────────────
 
 @pytest.fixture
-def app():
-    app = create_app('testing')
-    yield app
+def mock_mongo_db():
+    return mongomock.MongoClient().db
 
 
-@pytest.fixture
-def client(app):
-    return app.test_client()
+class TestRegisterRoute:
+    def test_register_missing_fields_returns_400(self, client):
+        response = client.post('/api/v1/auth/register', json={
+            'email': 'user@test.com',
+        })
+        assert response.status_code == 400
+        assert 'required' in response.get_json()['error'].lower()
+
+    def test_register_no_body_returns_400(self, client):
+        response = client.post('/api/v1/auth/register',
+                               data='not json',
+                               content_type='application/json')
+        assert response.status_code == 400
+
+    def test_register_invalid_email_returns_400(self, client):
+        with patch('app.models.user.UserModel.find_by_email', return_value=None), \
+             patch('app.models.user.UserModel.create_user', return_value=str(ObjectId())), \
+             patch('app.models.user.UserModel.find_by_id', return_value={
+                 '_id': ObjectId(), 'email': 'bad', 'full_name': 'Test',
+                 'role': 'user', 'created_at': datetime.utcnow(),
+             }):
+            response = client.post('/api/v1/auth/register', json={
+                'email': 'not-an-email',
+                'password': 'Valid123',
+                'full_name': 'Test User',
+            })
+            assert response.status_code == 400
+
+    def test_register_success_returns_201_with_tokens(self, client):
+        fake_id = ObjectId()
+        fake_user = {
+            '_id': fake_id,
+            'email': 'newuser@test.com',
+            'full_name': 'New User',
+            'role': 'user',
+            'created_at': datetime.utcnow(),
+        }
+        with patch('app.models.user.UserModel.find_by_email', return_value=None), \
+             patch('app.models.user.UserModel.create_user', return_value=str(fake_id)), \
+             patch('app.models.user.UserModel.find_by_id', return_value=fake_user):
+            response = client.post('/api/v1/auth/register', json={
+                'email': 'newuser@test.com',
+                'password': 'Valid123',
+                'full_name': 'New User',
+            })
+            data = response.get_json()
+            assert response.status_code == 201
+            assert 'access_token' in data
+            assert 'refresh_token' in data
+            assert data['user']['email'] == 'newuser@test.com'
+
+    def test_register_duplicate_email_returns_409(self, client):
+        existing_user = {
+            '_id': ObjectId(), 'email': 'existing@test.com',
+            'full_name': 'Existing', 'role': 'user',
+            'created_at': datetime.utcnow(),
+        }
+        with patch('app.models.user.UserModel.find_by_email', return_value=existing_user):
+            response = client.post('/api/v1/auth/register', json={
+                'email': 'existing@test.com',
+                'password': 'Valid123',
+                'full_name': 'Test User',
+            })
+            data = response.get_json()
+            assert response.status_code == 409
+            assert 'already registered' in data['error']
 
 
-def test_register_success(client):
-    """Test successful user registration with valid data."""
-    response = client.post('/api/v1/auth/register', json={
-        'email': 'test@example.com',
-        'password': 'securePass1',
-        'full_name': 'Test User',
-    })
-    # With a running test MongoDB, this would return 201
-    # assert response.status_code == 201
-    # assert response.json['message'] == 'User registered successfully'
-    assert response is not None
+class TestLoginRoute:
+    def test_login_missing_fields_returns_400(self, client):
+        response = client.post('/api/v1/auth/login', json={'email': 'a@b.com'})
+        assert response.status_code == 400
 
+    def test_login_user_not_found_returns_401(self, client):
+        with patch('app.models.user.UserModel.find_by_email', return_value=None):
+            response = client.post('/api/v1/auth/login', json={
+                'email': 'ghost@test.com',
+                'password': 'Valid123',
+            })
+            assert response.status_code == 401
+            assert 'Invalid' in response.get_json()['error']
 
-def test_register_duplicate_email(client):
-    """Test registration fails for duplicate email."""
-    payload = {
-        'email': 'duplicate@example.com',
-        'password': 'securePass1',
-        'full_name': 'Test User',
-    }
-    # First registration would succeed, second would return 409
-    # client.post('/api/v1/auth/register', json=payload)
-    # response = client.post('/api/v1/auth/register', json=payload)
-    # assert response.status_code == 409
-    # assert 'already registered' in response.json['error']
-    assert True
+    def test_login_wrong_password_returns_401(self, client):
+        fake_user = {
+            '_id': ObjectId(), 'email': 'user@test.com',
+            'password': b'hashed', 'is_active': True,
+            'full_name': 'Test', 'role': 'user',
+            'created_at': datetime.utcnow(),
+        }
+        with patch('app.models.user.UserModel.find_by_email', return_value=fake_user), \
+             patch('app.models.user.UserModel.verify_password', return_value=False):
+            response = client.post('/api/v1/auth/login', json={
+                'email': 'user@test.com',
+                'password': 'WrongPass1',
+            })
+            assert response.status_code == 401
 
+    def test_login_success_returns_tokens(self, client):
+        fake_id = ObjectId()
+        fake_user = {
+            '_id': fake_id, 'email': 'user@test.com',
+            'password': b'hashed', 'is_active': True,
+            'full_name': 'Test User', 'role': 'user',
+            'created_at': datetime.utcnow(),
+        }
+        with patch('app.models.user.UserModel.find_by_email', return_value=fake_user), \
+             patch('app.models.user.UserModel.verify_password', return_value=True), \
+             patch('app.models.user.UserModel.update_last_login', return_value=None):
+            response = client.post('/api/v1/auth/login', json={
+                'email': 'user@test.com',
+                'password': 'Valid123',
+            })
+            data = response.get_json()
+            assert response.status_code == 200
+            assert 'access_token' in data
+            assert 'refresh_token' in data
+            assert data['user']['email'] == 'user@test.com'
 
-def test_login_success(client):
-    """Test successful login returns tokens."""
-    # First register the user
-    # client.post('/api/v1/auth/register', json={
-    #     'email': 'login@example.com',
-    #     'password': 'securePass1',
-    #     'full_name': 'Login User',
-    # })
-    # response = client.post('/api/v1/auth/login', json={
-    #     'email': 'login@example.com',
-    #     'password': 'securePass1',
-    # })
-    # assert response.status_code == 200
-    # assert 'access_token' in response.json
-    # assert 'refresh_token' in response.json
-    assert True
+    def test_login_inactive_account_returns_403(self, client):
+        fake_user = {
+            '_id': ObjectId(), 'email': 'inactive@test.com',
+            'password': b'hashed', 'is_active': False,
+            'full_name': 'Inactive', 'role': 'user',
+        }
+        with patch('app.models.user.UserModel.find_by_email', return_value=fake_user):
+            response = client.post('/api/v1/auth/login', json={
+                'email': 'inactive@test.com',
+                'password': 'Valid123',
+            })
+            assert response.status_code == 403
 
-
-def test_login_wrong_password(client):
-    """Test login fails with wrong password."""
-    # Register user first, then try wrong password
-    # client.post('/api/v1/auth/register', json={
-    #     'email': 'wrong@example.com',
-    #     'password': 'securePass1',
-    #     'full_name': 'Wrong User',
-    # })
-    # response = client.post('/api/v1/auth/login', json={
-    #     'email': 'wrong@example.com',
-    #     'password': 'wrongPassword1',
-    # })
-    # assert response.status_code == 401
-    # assert 'Invalid email or password' in response.json['error']
-    assert True
+    def test_logout_requires_auth(self, client):
+        response = client.post('/api/v1/auth/logout')
+        assert response.status_code == 401

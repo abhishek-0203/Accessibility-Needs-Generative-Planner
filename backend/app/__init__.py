@@ -1,3 +1,5 @@
+import os
+
 from dotenv import load_dotenv
 from flask import Flask
 from flask_cors import CORS
@@ -6,13 +8,19 @@ from app.config import config
 from app.extensions import mongo, jwt
 
 
-def create_app(config_name='development'):
+def create_app(config_name=None):
     load_dotenv()
+
+    if config_name is None:
+        config_name = os.getenv('FLASK_ENV', 'development')
 
     app = Flask(__name__)
     app.config.from_object(config[config_name])
 
-    CORS(app)
+    allowed_origins = os.getenv('ALLOWED_ORIGINS', '*')
+    origins = [o.strip() for o in allowed_origins.split(',')] if ',' in allowed_origins else allowed_origins
+    CORS(app, origins=origins, supports_credentials=True)
+
     mongo.init_app(app)
     jwt.init_app(app)
 

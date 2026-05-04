@@ -1,7 +1,9 @@
 import os
 from app import create_app
 
-app = create_app(os.getenv('FLASK_ENV', 'development'))
+app = create_app()
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5001, debug=os.getenv('FLASK_DEBUG', '1') == '1')
+    port = int(os.getenv('PORT', 5001))
+    debug = os.getenv('FLASK_ENV', 'development') == 'development'
+    app.run(host='0.0.0.0', port=port, debug=debug)

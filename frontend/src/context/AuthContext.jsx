@@ -1,6 +1,6 @@
 import { createContext, useState, useEffect, useCallback } from 'react'
 import * as authService from '../services/authService'
-import api from '../services/api'
+import { getStore, KEYS } from '../services/mockData'
 
 export const AuthContext = createContext(null)
 
@@ -11,8 +11,14 @@ export function AuthProvider({ children }) {
 
   const fetchProfile = useCallback(async () => {
     try {
-      const { data } = await api.get('/profile')
-      setUser(data.user || data)
+      const storedUser = getStore(KEYS.CURRENT_USER)
+      if (storedUser) {
+        setUser(storedUser)
+      } else {
+        localStorage.removeItem('token')
+        setToken(null)
+        setUser(null)
+      }
     } catch {
       localStorage.removeItem('token')
       setToken(null)
@@ -52,7 +58,7 @@ export function AuthProvider({ children }) {
     try {
       await authService.logout()
     } catch {
-      // proceed even if server logout fails
+      // proceed regardless
     }
     localStorage.removeItem('token')
     setToken(null)

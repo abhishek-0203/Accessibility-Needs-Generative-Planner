@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { Users, FileText, MessageSquare, Star } from 'lucide-react'
 import Card from '../components/common/Card'
 import Loader from '../components/common/Loader'
-import api from '../services/api'
+import { getStore, KEYS } from '../services/mockData'
 
 export default function AdminDashboard() {
   const [stats, setStats] = useState(null)
@@ -10,21 +10,28 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const fetchAdminData = async () => {
-      try {
-        const [statsRes, usersRes] = await Promise.all([
-          api.get('/admin/stats'),
-          api.get('/admin/users'),
-        ])
-        setStats(statsRes.data)
-        setUsers(usersRes.data.users || usersRes.data || [])
-      } catch {
-        // admin data may not be available
-      } finally {
-        setLoading(false)
-      }
+    const loadAdminData = () => {
+      const allUsers = getStore(KEYS.USERS) || []
+      const allPlans = getStore(KEYS.PLANS) || []
+      const allFeedbacks = getStore(KEYS.FEEDBACKS) || []
+
+      const ratings = allFeedbacks.filter((f) => f.rating != null)
+      const avgRating = ratings.length > 0
+        ? ratings.reduce((sum, f) => sum + f.rating, 0) / ratings.length
+        : 0
+
+      setStats({
+        total_users: allUsers.length,
+        total_plans: allPlans.length,
+        total_feedback: allFeedbacks.length,
+        avg_rating: avgRating,
+      })
+
+      setUsers(allUsers.map(({ password, ...rest }) => rest))
+      setLoading(false)
     }
-    fetchAdminData()
+
+    loadAdminData()
   }, [])
 
   if (loading) return <Loader text="Loading admin data..." />
